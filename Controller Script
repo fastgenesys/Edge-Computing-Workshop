@@ -1,0 +1,63 @@
+#!/bin/bash
+set -e
+
+SCRIPT="/home/Genesys_lab/Desktop/workshop/2. LED with Web Server Demo/led_pattern.py"
+PIDFILE="/tmp/led_pattern.pid"
+LOGFILE="/tmp/led_pattern.log"
+STOPFLAG="/tmp/led_stop.flag"
+
+start() {
+  rm -f "$STOPFLAG"
+
+  if [ -f "$PIDFILE" ] && ps -p "$(cat "$PIDFILE")" >/dev/null 2>&1; then
+    echo "already_running"
+    exit 0
+  fi
+
+  rm -f "$PIDFILE"
+
+  # create files with safe permissions (important for PHP user www-data)
+  touch "$LOGFILE" "$PIDFILE"
+  chmod 666 "$LOGFILE" "$PIDFILE"
+
+  nohup /usr/bin/python3 "$SCRIPT" >>"$LOGFILE" 2>&1 &
+  echo $! > "$PIDFILE"
+
+  echo "started"
+}
+
+stop() {
+  touch "$STOPFLAG"
+
+  if [ -f "$PIDFILE" ]; then
+    PID="$(cat "$PIDFILE")"
+    if [ -n "$PID" ]; then
+      kill "$PID" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  rm -f "$PIDFILE"
+  rm -f "$STOPFLAG"
+
+  # Force all OFF (extra safety)
+  pinctrl set 17 op; pinctrl set 17 dl
+  pinctrl set 27 op; pinctrl set 27 dl
+  pinctrl set 22 op; pinctrl set 22 dl
+
+  echo "stopped"
+}
+
+status() {
+  if [ -f "$PIDFILE" ] && ps -p "$(cat "$PIDFILE")" >/dev/null 2>&1; then
+    echo "running $(cat "$PIDFILE")"
+  else
+    echo "stopped"
+  fi
+}
+
+case "$1" in
+  start) start ;;
+  stop) stop ;;
+  status) status ;;
+  *) echo "usage: $0 {start|stop|status}" ; exit 1 ;;
+esac
